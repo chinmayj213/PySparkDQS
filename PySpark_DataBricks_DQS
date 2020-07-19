@@ -1,0 +1,315 @@
+# Chinmay Kant Jain | 9636868692
+# Data Quality FrameWork
+# To Validate File Before Processing
+# This Framework can check duplicate Keys
+# This Framework can check valid date and valid date range
+# This Framework can check Mandatory Columns
+# This Framework can check List Value
+# This Framework can check Number Columns
+# This Framework can check Foreign Key 
+
+
+import pyspark
+from pyspark import SparkContext, SparkConf, SQLContext
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql import functions as F
+from pyspark.sql.types import *
+
+dbutils.fs.rm("dbfs:/FileStore/tables/temp", True)
+# dbutils.fs.rm("dbfs:/FileStore/tables/Config", True)
+
+field = [StructField("BatchId",StringType(), True),StructField("ErrorParticular", StringType(), True),\
+         StructField("FileInterface", StringType(), True),\
+         StructField("KeyColumnName1", StringType(), True),StructField("KeyColumnValue1", StringType(), True),\
+         StructField("KeyColumnName2", StringType(), True),StructField("KeyColumnValue2", StringType(), True),\
+         StructField("KeyColumnName3", StringType(), True),StructField("KeyColumnValue3", StringType(), True),\
+         StructField("KeyColumnName4", StringType(), True),StructField("KeyColumnValue4", StringType(), True),\
+         StructField("KeyColumnName5", StringType(), True),StructField("KeyColumnValue5", StringType(), True),\
+         StructField("KeyColumnName6", StringType(), True),StructField("KeyColumnValue6", StringType(), True),\
+         StructField("KeyColumnName7", StringType(), True),StructField("KeyColumnValue7", StringType(), True),\
+         StructField("KeyColumnName8", StringType(), True),StructField("KeyColumnValue8", StringType(), True),\
+         StructField("KeyColumnName9", StringType(), True),StructField("KeyColumnValue9", StringType(), True),\
+         StructField("KeyColumnName10", StringType(), True),StructField("KeyColumnValue10", StringType(), True)
+        ]
+schema = StructType(field)
+Reportingdf = sqlContext.createDataFrame(sc.emptyRDD(), schema)
+ 
+Customer = spark.read.csv("/FileStore/tables/Data/Customer.csv", header="true", inferSchema="true")
+Customer.cache() # Cache data for faster reuse
+'''customer = customer.dropna() # drop rows with missing values'''
+
+Product = spark.read.option("delimiter", "|").csv("/FileStore/tables/Data/Product.csv", header="true", inferSchema="true")
+Product.cache() # Cache data for faster reuse
+'''product = product.dropna() # drop rows with missing values'''
+
+ProductDiscount = spark.read.option("delimiter", ",").csv("/FileStore/tables/Data/ProductDiscount.csv", header="true", inferSchema="true")
+ProductDiscount.cache() # Cache data for faster reuse
+'''product = product.dropna() # drop rows with missing values'''
+
+ProductConfiguration = spark.read.option("delimiter", "|").csv("/FileStore/tables/Data/ProductConfiguration.csv", header="true", inferSchema="true")
+ProductConfiguration.cache() # Cache data for faster reuse
+# ProductConfiguration = ProductConfiguration.dropna() # drop rows with missing values
+
+
+fileinterface_configuration = spark.read.csv("/FileStore/tables/Config/fileinterface_configuration1.csv", header="true", inferSchema="true") 
+fileinterface_configuration.cache()# Cache data for faster reuse  
+# fileinterface_configuration.show()
+
+CurrentFileInterface='Product'
+df_tocheck = Product
+batchcolname=['BatchID']
+arraycounter=['0','1','2','3','4','5','6','7','8','9']
+
+
+DataSetNameList = [i['DataSets'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("DataSets").collect()]
+
+# Variable to handle primary key
+ErrorDuplicate=['Duplicate Records for Key Column']
+PrimaryColumnList = [i['PrimaryKey'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("PrimaryKey").collect()]
+if str(PrimaryColumnList) != '[None]' :
+  PrimaryColumnoutList = [(i + '_Count') for i in DataSetNameList]
+  PrimaryColumnoutIsDuplicate = [(i + '_IsDuplicate') for i in DataSetNameList]
+
+
+# Variable to handle NonEmptyColumn
+ErrorLookupCheck=['NonEmptyCheck is failed for this Row']
+NonEmptyColumns = [i['NonEmptyColumn'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("NonEmptyColumn").collect()]
+if str(NonEmptyColumns) != '[None]' :
+  for line in NonEmptyColumns:
+    NonEmptyColumnList = line.split('||')
+  
+# Variable to handle check Date
+ErrorDateCheck=['Date Check is failed for this Row']
+DateCheckColumns = [i['CheckDate'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("CheckDate").collect()]
+if str(DateCheckColumns) != '[None]' :
+  for line in DateCheckColumns:
+    DateCheckColumnList = line.split('||')
+
+# Variable to handle list check
+ErrorListCheck=['List Check is failed for this Row']
+ListCheckColumns = [i['ListCheck'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("ListCheck").collect()]
+if str(ListCheckColumns) != '[None]' :
+  for line in ListCheckColumns:
+    ListCheckColumnList = line.split('||')
+
+# Variable to handle Numeric check
+ErrorNumericCheck=['Numeric Check is failed for this Row']
+NumericCheckColumns = [i['IsNumeric'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("IsNumeric").collect()]
+if str(NumericCheckColumns) != '[None]' :
+  for line in NumericCheckColumns:
+    NumericCheckColumnList = line.split('||')
+
+# Variable to handle Numeric check
+ErrorReferenceCheck=['Relation Check is failed for this Row']
+ReferenceCheckColumns = [i['RelationCheck'] for i in fileinterface_configuration.filter(fileinterface_configuration["FileInterface"]==CurrentFileInterface).select("RelationCheck").collect()]
+if str(ReferenceCheckColumns) != '[None]' :
+  for line in ReferenceCheckColumns:
+    ReferenceCheckColumnList = line.split('||')    
+    
+# print(NonEmptyColumns)
+# print(DateCheckColumns)
+# print(ListCheckColumns)
+# print(NumericCheckColumns)
+# print(ReferenceCheckColumns)
+
+def set_and_add_column(df1,KeyColumn,CurrentCounter):
+    colvalue1 = "KeyColumnValue"+ arraycounter[int(CurrentCounter[0])+1]
+    colname1 = "KeyColumnName"+ arraycounter[int(CurrentCounter[0])+1]
+    temp_df4=df1   
+    temp_df4 = temp_df4.withColumnRenamed(KeyColumn, colvalue1)\
+    .withColumn(colname1,lit(KeyColumn)) 
+    return temp_df4
+      
+def AddForReporting(df1,BatchId,ErrorParticular,KeyColumn1,PrimaryColumnList):
+  
+    temp_df4=df1 
+    KeyColumnToAdd = list((set(PrimaryColumnList).union(set(KeyColumn1))))
+    strg = 'temp_df4.select(*BatchId'
+    j=0
+    for i in KeyColumnToAdd:
+      if i!= '':
+        strg += ',col("' + i + '")'
+    
+    strg += ')'
+    temp_df4=eval(strg)
+    temp_df5=temp_df4.withColumn("ErrorParticular",\
+                                 lit(ErrorParticular[0]))\
+    .withColumn("FileInterface",lit(CurrentFileInterface)) 
+    
+    j=0
+    for i in KeyColumnToAdd:
+      temp_df5=set_and_add_column(temp_df5,KeyColumnToAdd[j],arraycounter[j])
+      j=j+1
+  
+    temp_df5.coalesce(1).write.format('com.databricks.spark.csv').mode('append').option("header", "true").save("/FileStore/tables/temp")
+    return df1
+
+def checkduplicate(df1,groupbycol,collistname,validcolumnname):
+    temp_df = df1   
+    if validcolumnname!='':
+      temp_df1 = temp_df.groupBy(*groupbycol).count()
+      temp_df2 = temp_df.join(temp_df1, [*groupbycol], how='left')
+      temp_df3 = temp_df2.withColumn(*validcolumnname, when(col('count') > 1, lit('Yes')).otherwise('No')) 
+      temp_df3 = temp_df3.filter(col(*validcolumnname)=='Yes')
+      df1 = df1.join(temp_df3.select(*groupbycol,*validcolumnname), [*groupbycol], how='left')
+#       df1.show()
+      temp_df3 = AddForReporting(temp_df3,batchcolname,ErrorDuplicate,PrimaryColumnList,PrimaryColumnList)
+    return df1
+
+def is_digit(value):
+    if value:
+        return value.isdigit()
+    else:
+        return False
+    
+    
+# df = df.withColumn('IsNumericCheck', when(is_digit_udf(df['Postal code'])==True, "Yes").otherwise("No"))
+# df = df.withColumn('IsStringCheck', when(~is_digit_udf(df['Postal code'])==False,"Yes").otherwise("No")) 
+
+def NumericCheckofColumns(df1,ls):
+    temp_df = df1 
+#     is_digit_udf = udf(is_digit, BooleanType())
+    if ls[0] != '':
+ 
+      strg = 'temp_df.withColumn("IsNumericCheckFailed", when('
+      when_string = ['(col("' + i + '").cast("float").isNotNull())' for i in ls]
+      when_string = ' & '.join(when_string)
+      strg += when_string + ', "No").otherwise("Yes"))'
+    else:
+        strg = 'temp_df.withColumn("IsNumericCheckFailed", lit("No"))'
+    
+    print(strg)
+    temp_df = eval(strg)
+#     temp_df.show()
+    df1 = df1.join(temp_df.select(*PrimaryColumnList,"IsNumericCheckFailed"), [*PrimaryColumnList], how='left')
+    temp_df = temp_df.filter(col("IsNumericCheckFailed")=="Yes")
+    
+    temp_df = AddForReporting(temp_df,batchcolname,ErrorNumericCheck,ls,PrimaryColumnList)
+    return df1
+
+def NonEmptyCheckofColumns(df1,ls):
+    temp_df = df1 
+    if ls[0] != '':
+      strg = 'temp_df.withColumn("IsLookupCheckFailed", when('
+      when_string = ['(col("' + i + '").isNotNull())' for i in ls]
+      when_string = ' & '.join(when_string)
+      strg += when_string + ', "No").otherwise("Yes"))'
+    else:
+        strg = 'temp_df.withColumn("IsLookupCheckFailed", lit("No"))'
+    
+    temp_df = eval(strg)
+    df1 = df1.join(temp_df.select(*PrimaryColumnList,"IsLookupCheckFailed"), [*PrimaryColumnList], how='left')
+    temp_df = temp_df.filter(col("IsLookupCheckFailed")=="Yes")
+#     df1.show()
+    temp_df = AddForReporting(temp_df,batchcolname,ErrorLookupCheck,ls,PrimaryColumnList)
+    return df1
+
+def CheckDateColumns(df1,ls,PrimaryColumnList):
+    temp_df = df1
+    newls = ['','','','','','','','','','','','','']
+    newlscounter = 0
+    wherecompare =''
+    wherevalid =''
+    if ls[0] != '':
+      for DateList in ls: 
+        startdate =''
+        enddate= ''
+        j=len(DateList.split('|'))
+        if j == 2:
+          startdate = DateList.split('|')[0]
+          newls[newlscounter]= startdate
+          newlscounter=newlscounter+1
+          enddate= DateList.split('|')[1]
+          newls[newlscounter]= enddate
+          newlscounter=newlscounter+1
+          if len(wherevalid) > 0 : 
+            wherevalid = wherevalid + ' & ' 
+          if len(wherecompare) > 0 : 
+            wherecompare = wherecompare + ' & ' 
+          wherevalid = wherevalid + ' to_timestamp(col("' + startdate + '")).isNotNull() & to_timestamp(col("' + enddate + '")).isNotNull() '
+          wherecompare = wherecompare + ' to_timestamp(col("' + startdate + '")) < to_timestamp(col("' + enddate + '")) '
+        else: 
+          startdate = DateList.split('|')[0]
+          newls[newlscounter]= startdate
+          newlscounter=newlscounter+1
+          if len(wherevalid) > 0 : 
+             wherevalid = wherevalid + ' & '   
+          wherevalid = wherevalid + ' to_timestamp(col("' + startdate + '")).isNotNull() ' 
+      
+#         print(wherevalid)
+#         print(wherecompare)
+      if len(wherevalid) > 0 :
+        wherevalid = 'temp_df.withColumn("ValidDates",when(' + wherevalid + ', "Correct Date Values").otherwise("Invalid Date Values"))'
+        temp_df = eval(wherevalid)
+      if len(wherecompare) > 0 :
+        wherecompare = 'temp_df.withColumn("DateRanges",when(' + wherecompare + ', "Correct Date Range").otherwise("Invalid Date Range"))' 
+        temp_df = eval(wherecompare)
+
+  #     print(wherecompare)
+  #     print(wherevalid)
+      strg = 'temp_df.withColumn("IsInvalidDateValuesOrRange",when((col("DateRanges") =="Invalid Date Range") | (col("ValidDates")=="Invalid Date Values"),"Yes").otherwise("No"))'
+      temp_df = eval(strg)
+      df1 = df1.join(temp_df.select(*PrimaryColumnList,"IsInvalidDateValuesOrRange"), [*PrimaryColumnList], how='left')
+      temp_df = temp_df.filter(col("IsInvalidDateValuesOrRange")=="Yes")
+#       df1.show()
+      temp_df = AddForReporting(temp_df,batchcolname,ErrorDateCheck,newls,PrimaryColumnList)
+#     temp_df.select("ProductStartDate","ProductEndDate","BatchRefreshDate","ValidDates","DateRanges","CheckDates").show()
+    return df1
+
+def CheckListColumns(df1,ls,PrimaryColumnList):
+    temp_df = df1
+    newls = ['','','','','','','','','','','','','']
+    newlscounter = -1
+    wherecompare =''  
+    if ls[0] != '':
+      for listvalue in ls:   
+            j=len(listvalue.split('|'))
+            if listvalue != '':
+              newlscounter=newlscounter+1
+              newls[newlscounter] = listvalue.split('|')[0]
+            i=1
+            if newlscounter != 0 :
+              wherecompare = wherecompare + ' & ' 
+            wherecompare = wherecompare + '(temp_df.' +  newls[newlscounter] +'.isin('
+            listval =''
+            while i < j:
+#               print(listvalue)
+              if len(listval) > 0:
+                listval = listval + ',' 
+              listval = listval + '"' + listvalue.split('|')[i] + '"'
+              i = i+1
+            
+            wherecompare = wherecompare+ listval + ')==True)'              
+            
+              
+      wherecompare = 'temp_df.withColumn("IsListCheckFailed",when(' + wherecompare + ', "No").otherwise("Yes"))'
+      temp_df = eval(wherecompare)
+#      print(wherecompare)
+#      print (newls)
+      df1 = df1.join(temp_df.select(*PrimaryColumnList,"IsListCheckFailed"), [*PrimaryColumnList], how='left')
+      temp_df = temp_df.filter(col("IsListCheckFailed")=="Yes")
+      temp_df = AddForReporting(temp_df,batchcolname,ErrorListCheck,newls,PrimaryColumnList) 
+#       df1.show()
+#     temp_df.select("ProductType","ProductStatus","ListCheck").show()
+    return df1
+
+
+
+# check unique records
+if str(PrimaryColumnList) != '[None]' :
+  df_tocheck = checkduplicate(df_tocheck,PrimaryColumnList,PrimaryColumnoutList,PrimaryColumnoutIsDuplicate)
+# check nonempty columns
+if str(NonEmptyColumns) != '[None]' :
+  df_tocheck = NonEmptyCheckofColumns(df_tocheck,NonEmptyColumnList)
+# check check date columns
+if str(DateCheckColumns) != '[None]' :
+  df_tocheck = CheckDateColumns(df_tocheck,DateCheckColumnList,PrimaryColumnList)
+# check check list columns
+if str(ListCheckColumns) != '[None]' :
+  df_tocheck = CheckListColumns(df_tocheck,ListCheckColumnList,PrimaryColumnList)
+# check check numeric columns
+if str(NumericCheckColumns) != '[None]' :
+  df_tocheck = NumericCheckofColumns(df_tocheck,NumericCheckColumnList)  
+
+df_tocheck.coalesce(1).write.format('com.databricks.spark.csv').mode('append').option("header", "true").save("/FileStore/tables/temp")

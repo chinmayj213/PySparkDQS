@@ -1,0 +1,5 @@
+FileInterface,DataSets,PrimaryKey,NonEmptyColumn,CheckDate,ListCheck,IsNumberic
+Product,Product,ProductCode,ProductCode||ProductName||MarketCode||ProductType||ProductStartDate||ProductEndDate,ProductStartDate|ProductEndDate||BatchRefreshDate,ProductType|Rollstock|Pouch||ProductStatus|Active|InActive,
+ProductDiscount,ProductDiscount,ProductDiscountCode,ProductCode||ProductType||ProductDiscountCode||ProductDiscountName||TypeofDiscount||CustomerCode||MarketCode,StartDate:ProductDiscountStartDate|EndDate:ProductDiscountEndDate|BatchRefreshDate,DiscountType|MachineryLease|Rebate,DiscountAmount
+Customer,Customer,CustomerCode,CustomerCode||CustomerName,,,
+ProductConfiguration,ProductConfiguration,ProductConfigurationCode,ProductConfigurationCode,,,
